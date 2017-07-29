@@ -1,0 +1,255 @@
+##########################################################################
+########## 知识、技巧
+##########################################################################
+scp 的时候，在当前目录下，如果拷过去的对方也是在那个目录下，可以用 $PWD
+scp a.txt s1:$pwd
+
+### Copy Reference 是复制包名+类名
+### 显示目录大小   du -h ~/.m2
+
+
+
+
+##########################################################################
+########## scala
+##########################################################################
+val   是value，值，定义的是常量，不可改变
+var   是variable，变量的意思，可以改变
+def   定义的是方法
+函数不需要def，直接  val fun1 =  (v1:Int)=>v1*100，定义的函数可以赋值给变量，这样就可以把这变量当参数进行传递，去再调别的方法。
+map   的意思是将 序列，集合，数组等里面的每一个值进行拿出来处理，这就可以  如对a这个集合处理，a.map(fun1)  这样调用，结果就是对a的每个元素都乘100
+想实现上面的效果，也可以这样执行：a.map(_*100)，这就是scala里神奇的下划线_，它就是点位符。
+
+函数变形：
+val fun1 =  (v1:Int)=>v1*100
+val fun12 =  (v1:Int, v2:String) => {v1+v2}
+var fun2 : Int=>String = { x => x.toString}
+如果两个参数咋接收？
+var fun3 : (Int,String) => (String, Int) = {
+    (x, y) => {(y+1, x+1)}
+}
+空返回值的方法
+def testa(str :String) : Unit = { xxx }或者
+def testa(str :String) = { xxx }   空返回，实际上返回的是 ()
+## 把方法变为函数：：[神奇的下划线]
+def mm1(v1:Int, v2:Int) : Int = {v1+v2}
+val ff2 = mm1 _     与m1功能完全相同的函数，可以当变量传给别的方法。
+
+
+#### 柯里化的两种表现形式：
+def m(x : Int)(y: Int) = x*y
+def m1(x : Int) = (y : Int) => x*y
+
+#### def 这种方法，可以直接调用他，但是想把他当函数一样做为参数传递，需要在后面加上 _，或者不带参数这种，系统会隐式的转换为函数。
+
+#### 泛型、隐式转换
+最大边界 ( <: )(UpperBound)，定义传过来的泛型的最大的边界，必须要小于某个层级的类
+最大边界 ( >: )(LowerBound)，定义传过来的泛型的最小的边界，必须要大于某个层级的类
+视图界定( <% )(ViewBound)，必须传进去一个隐式转换的函数
+上下文界定(:)，必须传进去一个隐式转换的值
+
+####
+关于compareTo比较方法，前面大于后面，返回1，代表正序排序(由低到高)。前面小于后面，返回-1，代表倒序排序(由高到低)。
+前面减后面，代表降序。后面减前面代表正序。
+
+
+
+
+
+#############################################################################
+####################### spark
+#############################################################################
+下载地址：
+https://archive.apache.org/dist/spark/spark-1.6.1/spark-1.6.1-bin-hadoop2.6.tgz
+
+解压：
+tar -vxzf /home/hadoop/soft/spark-1.6.1-bin-hadoop2.6.tgz -C /export/servers/
+
+## 安装
+cd /export/servers/
+mv spark-1.6.1-bin-hadoop2.6 spark
+cd spark/conf
+mv spark-env.sh.template spark-env.sh
+
+cat >> spark-env.sh << EOF
+#新加的配置
+export JAVA_HOME=/usr/local/java
+export SPARK_MASTER_IP=s1
+export SPARK_MASTER_PORT=7077
+EOF
+
+# 配置slave节点
+mv slaves.template slaves
+cat >> slaves << EOF
+
+s2
+s3
+s4
+EOF
+
+
+#### 将配置好的Spark拷贝到其他节点上
+cd /export/servers
+scp -r spark s2:$PWD
+
+### 在s1上添加环境变量：
+su - root
+vi /etc/profile
+#加入：
+export SPARK_HOME=/export/servers/spark
+export PATH=$PATH:$SPARK_HOME/bin
+
+source /etc/profile
+su - hadoop
+source /etc/profile
+
+###
+Spark集群配置完毕，目前是1个Master，2个Work（s1上既有master也有work），在 s1 上启动Spark集群
+/export/servers/spark/sbin/start-all.sh
+
+###
+启动后执行jps命令，主节点上有Master进程，其他子节点上有Work进行，登录Spark管理界面查看集群状态（主节点）：http://s1:8080/
+
+
+### zookeeper  这个先不配置
+到此为止，Spark集群安装完毕，但是有一个很大的问题，那就是Master节点存在单点故障，要解决此问题，就要借助zookeeper，并且启动至少两个Master节点来实现高可靠，配置方式比较简单：
+Spark集群规划：node1，node2是Master；node3，node4，node5是Worker
+安装配置zk集群，并启动zk集群
+停止spark所有服务，修改配置文件spark-env.sh，在该配置文件中删掉SPARK_MASTER_IP并添加如下配置
+export SPARK_DAEMON_JAVA_OPTS="-Dspark.deploy.recoveryMode=ZOOKEEPER -Dspark.deploy.zookeeper.url=zk1,zk2,zk3 -Dspark.deploy.zookeeper.dir=/spark"
+1.在node1节点上修改slaves配置文件内容指定worker节点
+2.在node1上执行sbin/start-all.sh脚本，然后在node2上执行sbin/start-master.sh启动第二个Master
+
+
+### 执行第一个spark程序, 最后的100是指经过100次迭代
+spark-submit \
+--class org.apache.spark.examples.SparkPi \
+--master spark://s1:7077 \
+--executor-memory 1G \
+--total-executor-cores 1 \
+/export/servers/spark/lib/spark-examples-1.6.1-hadoop2.6.0.jar \
+100
+
+
+### 启动spark shell
+spark-shell --master spark://s1:7077
+或者指定后面的参数
+spark-shell --master spark://s1:7077 --executor-memory 512m --total-executor-cores 1
+
+
+### 使用spark-submit命令提交Spark应用（注意参数的顺序）
+spark-submit \
+--class cn.jhsoft.spark.wordcount.WordCount \
+--master spark://s1:7077 \
+/home/hadoop/ss-1.0.jar \
+hdfs://s1:9000/wordcount/input/a.txt \
+hdfs://s1:9000/out2
+
+###在spark shell中编写WordCount程序
+#首先启动hdfs
+start-dfs.sh
+
+#向hdfs上传一个文件到 hdfs://s1:9000/words.txt
+#在spark shell中用scala语言编写spark程序
+#结果输出到控制台
+sc.textFile("hdfs://s1:9000/wordcount/input/a.txt").flatMap(_.split(" ")).map((_,1)).reduceByKey(_+_).collect
+sc.textFile("hdfs://s1:9000/wordcount/input/a.txt").flatMap(_.split(" ")).map((_,1)).reduceByKey(_+_).sortBy(_._2, false).collect
+#结果放入hdfs，这个如果有多个文件(如果读的hdfs是目录的话)，会写入多个结果
+sc.textFile("hdfs://s1:9000/wordcount/input/a.txt").flatMap(_.split(" ")).map((_,1)).reduceByKey(_+_).sortBy(_._2, false).saveAsTextFile("hdfs://s1:9000/out")
+#把结果写入一个文件，也就是启动一个mapReduces，设置 reduceByKey(_+_, 1)
+sc.textFile("hdfs://s1:9000/wordcount/input/a.txt").flatMap(_.split(" ")).map((_,1)).reduceByKey(_+_, 1).sortBy(_._2, false).saveAsTextFile("hdfs://s1:9000/out")
+
+
+#### spark算子(就是函数的意思) 分两类
+一类叫 Transformation  (转换)，如有map,textFile等
+一类叫 Action          (动作)，常用的有如 take是指取多少条，count是得到数量，collect是把结果收集起来可以赋值给一个变量,打印到屏幕
+
+Transformation延迟执行，它只会记录元数据信息，当计算任务触发Action时才会真正开始计算。
+
+### RDD[分布式的数据集]   的创建有两类：
+1是从文件textFile，hdfs，RDD里没有真正要计算的数据，只记录一下元数据
+2是通过scala集合 sc.parallelize  或数组以并行化的方式创建RDD，引用原来的集合
+val rdd1 = sc.parallelize(Array(1,2,3,4,5,6))
+查看rdd的分区数量
+rdd1.partitions.length
+可以指定rdd的分区数
+val rdd2 = sc.parallelize(Array(1,2,3,4,5,6), 5)
+#对rdd1进行每个元素
+rdd1.map(_*10).sortBy(x=>x,false).collect
+
+###################################################################################################
+#spark Transformation
+val rdd1 = sc.parallelize(List(5,6,4,7,3,8,2,9,1,10))
+val rdd2 = sc.parallelize(List(5,6,4,7,3,8,2,9,1,10)).map(_*2).sortBy(x=>x,true)
+val rdd3 = rdd2.filter(_>10)
+val rdd2 = sc.parallelize(List(5,6,4,7,3,8,2,9,1,10)).map(_*2).sortBy(x=>x+"",true)
+val rdd2 = sc.parallelize(List(5,6,4,7,3,8,2,9,1,10)).map(_*2).sortBy(x=>x.toString,true)
+val rdd4 = sc.parallelize(Array("a b c", "d e f", "h i j"))
+rdd4.flatMap(_.split(' ')).collect
+val rdd5 = sc.parallelize(List(List("a b c", "a b b"),List("e f g", "a f g"), List("h i j", "a a b")))
+
+List("a b c", "a b b") =List("a","b",))
+
+rdd5.flatMap(_.flatMap(_.split(" "))).collect
+
+#union并集
+val rdd6 = sc.parallelize(List(5,6,4,7))
+val rdd7 = sc.parallelize(List(1,2,3,4))
+val rdd8 = rdd6.union(rdd7)
+rdd8.distinct.sortBy(x=>x).collect
+
+#intersection交集
+val rdd9 = rdd6.intersection(rdd7)
+val rdd1 = sc.parallelize(List(("tom", 1), ("jerry", 2), ("kitty", 3)))
+val rdd2 = sc.parallelize(List(("jerry", 9), ("tom", 8), ("shuke", 7), ("tom", 2))
+
+#join
+val rdd3 = rdd1.join(rdd2)
+val rdd3 = rdd1.leftOuterJoin(rdd2)
+val rdd3 = rdd1.rightOuterJoin(rdd2)
+
+#groupByKey
+val rdd3 = rdd1 union rdd2
+rdd3.groupByKey
+rdd3.groupByKey.map(x=>(x._1,x._2.sum))
+rdd3.groupByKey.mapValues(_.sum)
+
+#WordCount
+sc.textFile("/root/words.txt").flatMap(x=>x.split(" ")).map((_,1)).reduceByKey(_+_).sortBy(_._2,false).collect
+sc.textFile("/root/words.txt").flatMap(x=>x.split(" ")).map((_,1)).groupByKey.map(t=>(t._1, t._2.sum)).collect
+
+#cogroup
+val rdd1 = sc.parallelize(List(("tom", 1), ("tom", 2), ("jerry", 3), ("kitty", 2)))
+val rdd2 = sc.parallelize(List(("jerry", 2), ("tom", 1), ("shuke", 2)))
+val rdd3 = rdd1.cogroup(rdd2)
+val rdd4 = rdd3.map(t=>(t._1, t._2._1.sum + t._2._2.sum))
+
+#cartesian 笛卡尔积
+val rdd1 = sc.parallelize(List("tom", "jerry"))
+val rdd2 = sc.parallelize(List("tom", "kitty", "shuke"))
+val rdd3 = rdd1.cartesian(rdd2)
+
+###################################################################################################
+#spark action
+val rdd1 = sc.parallelize(List(1,2,3,4,5), 2)
+#collect
+rdd1.collect
+#reduce
+val rdd2 = rdd1.reduce(_+_)
+#count
+rdd1.count
+#top 排序取最大的
+rdd1.top(2)
+#take 取前2个，不排序就只是取前2个
+rdd1.take(2)
+#first 与take(1)相同，只不过take(1)是数组，这个first是直接取出了元素
+rdd1.first
+#takeOrdered
+rdd1.takeOrdered(3)
+
+
+
+
+
+
+

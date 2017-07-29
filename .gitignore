@@ -1,0 +1,10 @@
+/target
+/.idea
+*.iml
+firestorm.log*
+/logs
+/out
+.DS_Store
+*.bak
+/src/META-INF
+dependency-reduced-pom.xml
