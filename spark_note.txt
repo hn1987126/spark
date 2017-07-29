@@ -141,9 +141,12 @@ spark-shell --master spark://s1:7077 --executor-memory 512m --total-executor-cor
 spark-submit \
 --class cn.jhsoft.spark.wordcount.WordCount \
 --master spark://s1:7077 \
-/home/hadoop/ss-1.0.jar \
+--executor-memory 1G
+--total-executor-cores 2
+/home/hadoop/spark-1.0.jar \
 hdfs://s1:9000/wordcount/input/a.txt \
 hdfs://s1:9000/out2
+
 
 ###在spark shell中编写WordCount程序
 #首先启动hdfs

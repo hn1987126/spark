@@ -10,7 +10,7 @@ object WordCount {
   def main(args: Array[String]): Unit = {
     val config = new SparkConf().setAppName("WC")
     val sc = new SparkContext(config)
-    sc.textFile(args(0)).flatMap(_.split(" ")).map((_, 1)).reduceByKey(_+_).sortBy(_._2, false)
+    sc.textFile(args(0)).flatMap(_.split(" ")).map((_, 1)).reduceByKey(_+_).sortBy(_._2, false).saveAsTextFile(args(1))
     sc.stop()
   }
 
