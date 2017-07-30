@@ -1,4 +1,4 @@
-package cn.jhsoft.spark.wordcount
+package cn.jhsoft.spark.demo.wordcount
 
 import org.apache.spark.{SparkConf, SparkContext}
 

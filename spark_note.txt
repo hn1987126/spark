@@ -55,7 +55,6 @@ def m1(x : Int) = (y : Int) => x*y
 
 
 
-
 #############################################################################
 ####################### spark
 #############################################################################
@@ -249,6 +248,195 @@ rdd1.take(2)
 rdd1.first
 #takeOrdered
 rdd1.takeOrdered(3)
+
+
+###################################################################################################
+RDD 高级算子
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+map是对每个元素操作, mapPartitions是对其中的每个partition操作
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+mapPartitionsWithIndex : 把每个partition中的分区号和对应的值拿出来, 看源码
+val func = (index: Int, iter: Iterator[(Int)]) => {
+  iter.toList.map(x => "[partID:" +  index + ", val: " + x + "]").iterator
+}
+val rdd1 = sc.parallelize(List(1,2,3,4,5,6,7,8,9), 2)
+rdd1.mapPartitionsWithIndex(func).collect
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+aggregate
+
+def func1(index: Int, iter: Iterator[(Int)]) : Iterator[String] = {
+  iter.toList.map(x => "[partID:" +  index + ", val: " + x + "]").iterator
+}
+val rdd1 = sc.parallelize(List(1,2,3,4,5,6,7,8,9), 2)
+rdd1.mapPartitionsWithIndex(func1).collect    #这个是看每个分区里有什么，有哪些元素
+###是action操作, 第一个参数是初始值, 第二个参数:是2个函数[每个函数都是2个参数(第一个参数:先对个个分区进行合并, 第二个:对个个分区合并后的结果再进行合并), 输出一个参数]
+###0 + (0+1+2+3+4   +   0+5+6+7+8+9)
+rdd1.aggregate(0)(_+_, _+_)
+### 比较不同分区的各自的最大值，把他们的最大值相加，如果有初始值，那就与各分区的相加，再最后与汇总的结果相加
+rdd1.aggregate(0)(math.max(_, _), _ + _)
+### 比较不同分区的最大值，再在各分区里取最大值。
+rdd1.aggregate(0)(math.max(_, _), math.max(_,_))
+### 这个是10分别和第一分区的比，10分别和第二分区的比，他们的最大值，再跟10比。意思是说10会与各分区，还有最后汇总的结果都有关系 。
+rdd1.aggregate(10)(math.max(_, _), math.max(_,_))
+###5和1比, 得5再和234比得5 --> 5和6789比,得9 --> 5 + (5+9)
+rdd1.aggregate(5)(math.max(_, _), _ + _)
+val arr = Array(1,2,3)
+#这是两两比较 最大值，得出最终的最大值
+arr.reduce(math.max(_,_))
+
+
+val rdd2 = sc.parallelize(List("a","b","c","d","e","f"),2)
+def func2(index: Int, iter: Iterator[(String)]) : Iterator[String] = {
+  iter.toList.map(x => "[partID:" +  index + ", val: " + x + "]").iterator
+}
+rdd2.aggregate("")(_ + _, _ + _)
+rdd2.aggregate("|")(_ + _, _ + _)     结果为||abc|def    每个分区前面有个|，最后的结果前面再有个|
+
+val rdd3 = sc.parallelize(List("12","23","345","4567"),2)
+rdd3.aggregate("")((x,y) => math.max(x.length, y.length).toString, (x,y) => x + y)
+# 上面的结果是对每个分区里的元素，字符串长度比较出最大值，转为字符串，第一分区为2，第二分区为4，汇聚的方式是连接，得24，但也有可能并行计算分区2先完成，得4和2相连，得42
+
+val rdd4 = sc.parallelize(List("12","23","345",""),2)
+rdd4.aggregate("")((x,y) => math.min(x.length, y.length).toString, (x,y) => x + y)
+# 结果是 01或10，之前还是没有理解这种方式，这是把初始值先和第一个数比，结果如谁最小，再跟第二个数比。这样来循环的。
+# 第一个分区来如下两轮
+# math.min("".length, "12".length)  结果是 0，因为是求长度的最小值。下一轮是用这一轮的结果，代入进去跟下一个数比较
+# math.min("0".length, "23".length)  结果是1。因为是求min(1,2)得到1
+
+val rdd5 = sc.parallelize(List("12","23","","345"),2)
+rdd5.aggregate("")((x,y) => math.min(x.length, y.length).toString, (x,y) => x + y)
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+aggregateByKey
+
+val pairRDD = sc.parallelize(List( ("cat",2), ("cat", 5), ("mouse", 4),("cat", 12), ("dog", 12), ("mouse", 2)), 2)
+# 这个func2和下面的 mapPartitionsWithIndex 主要是为了看下，哪个分区里有些什么元素
+def func2(index: Int, iter: Iterator[(String, Int)]) : Iterator[String] = {
+  iter.toList.map(x => "[partID:" +  index + ", val: " + x + "]").iterator
+}
+pairRDD.mapPartitionsWithIndex(func2).collect
+# 局部[每个分区]根据key进行操作，先对相同的key求和，再汇总对结果求和。这个其实和 pairRDD.reduceByKey(_+_).collect 功能相同
+pairRDD.aggregateByKey(0)(_+_, _ + _).collect
+# 局部根据key进行操作，再全部根据key进行操作，结果为 Array[(String, Int)] = Array((dog,12), (cat,17), (mouse,6))
+pairRDD.aggregateByKey(0)(math.max(_, _), _ + _).collect
+pairRDD.aggregateByKey(100)(math.max(_, _), _ + _).collect
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+checkpoint
+sc.setCheckpointDir("hdfs://s1:9000/ck")
+val rdd = sc.textFile("hdfs://s1:9000/wordcount/input").flatMap(_.split(" ")).map((_, 1)).reduceByKey(_+_)
+rdd.checkpoint
+rdd.isCheckpointed
+rdd.count
+rdd.isCheckpointed
+rdd.getCheckpointFile
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+重新分区，repartition底层其实就是调用coalesce方法，只不过第二个参数是传的true，代表要立即分区，如果coalesce第二个参数是传false，那其实没啥用，并没有分区
+coalesce, repartition
+val rdd1 = sc.parallelize(1 to 10, 10)
+val rdd2 = rdd1.coalesce(2, false)
+rdd2.partitions.length
+val rdd3 = rdd1.repartition(2)    相当于 rdd1.coalesce(2, true)
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+把结果转为Map
+collectAsMap : Map(b -> 2, a -> 1)
+val rdd = sc.parallelize(List(("a", 1), ("b", 2)))
+rdd.collectAsMap
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+combineByKey : 和reduceByKey是相同的效果
+###第一个参数x:原封不动取出来, 第二个参数:是函数, 局部运算, 第三个:是函数, 对局部运算后的结果再做运算
+###每个分区中每个key中value中的第一个值, (hello,1)(hello,1)(good,1)-->(hello(1,1),good(1))-->x就相当于hello的第一个1, good中的1
+val rdd1 = sc.textFile("hdfs://s1:9000/wordcount/input/").flatMap(_.split(" ")).map((_, 1))
+val rdd2 = rdd1.combineByKey(x => x, (a: Int, b: Int) => a + b, (m: Int, n: Int) => m + n)
+# 上面的这个 x=>x 是相当于根据key分组出来的第一个参数，如果 x=> x+10相当于初始值为10，a+b是代表用x的值再跟第二个元素值比较，m+n是指结果汇总的累计
+rdd1.collect
+rdd2.collect
+
+###当input下有3个文件时(有3个block块, 不是有3个文件就有3个block, ), 每个会多加1个10，每个分区(block)只加一次哟
+val rdd3 = rdd1.combineByKey(x => x + 10, (a: Int, b: Int) => a + b, (m: Int, n: Int) => m + n)
+rdd3.collect
+
+
+val rdd4 = sc.parallelize(List("dog","cat","gnu","salmon","rabbit","turkey","wolf","bear","bee"), 3)
+val rdd5 = sc.parallelize(List(1,1,2,2,2,1,2,2,2), 3)
+# 拉链  结果为Array((1,dog), (1,cat), (2,gnu), (2,salmon), (2,rabbit), (1,turkey), (2,wolf), (2,bear), (2,bee))
+val rdd6 = rdd5.zip(rdd4)
+val rdd7 = rdd6.combineByKey(List(_), (x: List[String], y: String) => x :+ y, (m: List[String], n: List[String]) => m ++ n)
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+按key或按value进行统计
+countByKey
+
+val rdd1 = sc.parallelize(List(("a", 1), ("b", 2), ("b", 2), ("c", 2), ("c", 1)))
+rdd1.countByKey
+rdd1.countByValue
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+过滤时给个范围，如rdd1.filterByRange("b", "d")会把，b、c、d的都过滤出来。是征对里面的key的。
+filterByRange
+
+val rdd1 = sc.parallelize(List(("e", 5), ("c", 3), ("d", 4), ("c", 2), ("a", 1)))
+val rdd2 = rdd1.filterByRange("b", "d")
+rdd2.collect
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+这是把数组的value压平。再和key进行两两组合
+flatMapValues  :  Array((a,1), (a,2), (b,3), (b,4))
+val rdd3 = sc.parallelize(List(("a", "1 2"), ("b", "3 4")))
+val rdd4 = rdd3.flatMapValues(_.split(" "))
+rdd4.collect
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+foldByKey
+
+val rdd1 = sc.parallelize(List("dog", "wolf", "cat", "bear"), 2)
+val rdd2 = rdd1.map(x => (x.length, x))
+val rdd3 = rdd2.foldByKey("")(_+_)
+#结果为  Map((3,dogcat), (4,wolfbear))
+
+val rdd = sc.textFile("hdfs://node-1.itcast.cn:9000/wc").flatMap(_.split(" ")).map((_, 1))
+rdd.foldByKey(0)(_+_)
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+foreachPartition   是按分区来循环的。不产生新的数组
+val rdd1 = sc.parallelize(List(1, 2, 3, 4, 5, 6, 7, 8, 9), 3)
+rdd1.foreachPartition(x => println(x.reduce(_ + _)))
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+keyBy : 以传入的参数做key
+val rdd1 = sc.parallelize(List("dog", "salmon", "salmon", "rat", "elephant"), 3)
+val rdd2 = rdd1.keyBy(_.length)    结果是 Array((3,dog), (6,salmon), (6,salmon), (3,rat), (8,elephant))
+rdd2.collect
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+把里面的key取出来生成一个一维数组。values是把value取出来生成一维数组
+keys values
+val rdd1 = sc.parallelize(List("dog", "tiger", "lion", "cat", "panther", "eagle"), 2)
+val rdd2 = rdd1.map(x => (x.length, x))
+rdd2.keys.collect
+rdd2.values.collect
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
 
 
 
