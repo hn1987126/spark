@@ -328,6 +328,7 @@ pairRDD.aggregateByKey(100)(math.max(_, _), _ + _).collect
 
 -------------------------------------------------------------------------------------------
 -------------------------------------------------------------------------------------------
+检查点
 checkpoint
 sc.setCheckpointDir("hdfs://s1:9000/ck")
 val rdd = sc.textFile("hdfs://s1:9000/wordcount/input").flatMap(_.split(" ")).map((_, 1)).reduceByKey(_+_)
@@ -438,6 +439,7 @@ rdd2.values.collect
 -------------------------------------------------------------------------------------------
 -------------------------------------------------------------------------------------------
 
+#### lineage 血统：记录每个RDD的元数据信息和转换行为，当RDD的部分数据丢失时，它可以根据这些信息来重新运算和恢复数据的分区。
 
 ########  (在spark命令行里执行的一条命令，如 val rdd = sc.textFile("hdfs://s1:9000/wordcount/input/a.txt").flatMap(_.split(" ")).map((_,1)).reduceByKey(_+_)   )
 用 rdd.toDebugString  可以把各步骤的依赖关系打印出来，也就是比如wordcount，要做很多步，如hdfs,flatMap,map,reduceByKey等。
@@ -463,4 +465,14 @@ debug调试后，可以在本地电脑上 jps看到，会多了一个 WordCountR
 如：val rdd1 = sc.textFile("hdfs:xxx")
 rdd1.cache()
 ### 释放缓存   rdd1.unpersist(true)
+
+###### 设置还原点：checkpoint。这个适合于，某个计算的结果很重要，他很慢，而且他下面有很多其他的计算要依赖他。这时适合把他放入还原点checkpoint。
+###### 设置了checkpoint，并且有Action执行的时候，会把这之前依赖的父动作给删掉，将来有意外要恢复的时候也是从checkpoint里进行恢复，而不从血统轨迹里恢复。
+sc.setCheckpointDir("hdfs:s1:9000/ck")
+val rdd1 = rdd2.map(x=>x._2, 1).checkpoint   // 想用checkpoint，必须在此之前先执行  setCheckpointDir
+rdd.count   这时是Action，会把checkpoint提交，此时hdfs目录的根目录下，ck目录下就有数据了。在上一句执行checkpoint的时候，只是会建个ck目录，里面没有数据。
+建议先  cache()，再checkpoint, 再collect等Action。这样的话，checkpoint就可以从内存中取了。
+
+##### RDD  有方向无闭环 DAG，DAG最后的边界，是Action的时候。
+DAG 的名字叫 有向无环图。
 
