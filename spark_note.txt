@@ -439,8 +439,28 @@ rdd2.values.collect
 -------------------------------------------------------------------------------------------
 
 
+########  (在spark命令行里执行的一条命令，如 val rdd = sc.textFile("hdfs://s1:9000/wordcount/input/a.txt").flatMap(_.split(" ")).map((_,1)).reduceByKey(_+_)   )
+用 rdd.toDebugString  可以把各步骤的依赖关系打印出来，也就是比如wordcount，要做很多步，如hdfs,flatMap,map,reduceByKey等。
+rdd.dependencies  可以看当前状态，当前是谁，一般是 org.apache.spark.shuffledRDD
 
+RDD和RDD（即多条命令行里的语句之间）也是有依赖关系的
+RDD是分布式的数据集，里面有HDFS，Mysql，还有集合等。
 
+对于wordcount程序:
+textFile方法会产生两个RDD，1、HadoopRDD，2、MapPartitionRDD【调用了spark的map方法，把第一步hadoop返回的偏移量去掉了(hadoop返回了，偏移量和行内容)】
+flatMap 方法会产生一个RDD   MapPartitionRDD
+map 方法会产生一个RDD   MapPartitionRDD
+reduceByKey 方法会产生一个RDD   ShuffledRDD
+saveToTextFile  方法产生一个RDD    MapPartitionRDD
 
+### jps可知，启动spark-shell命令行，它也是一个app任务，在worker机器上会有这个进程  CoarseGrainedExecutorBackend  也就是Executor
+在 master那台机器上，会有SparkSubmit 进程。也就是 Driver
 
+### 远程提交，本地的程序，提交到远程集群里，本地调试。
+debug调试后，可以在本地电脑上 jps看到，会多了一个 WordCountRemote(如运行的是WordCountRemote这个类)。这个相当于是 Driver
+
+### spark的缓存机制，在之前的方法之后加个   cache()  就代表缓存起来，他底层是调persist()方法。 其中StorageLevel级别为-> MEMORY_ONLY只放内存里，MEMORY_ONLY_2是指内存中放2份，一份在本机，一份在别的机器
+如：val rdd1 = sc.textFile("hdfs:xxx")
+rdd1.cache()
+### 释放缓存   rdd1.unpersist(true)
 

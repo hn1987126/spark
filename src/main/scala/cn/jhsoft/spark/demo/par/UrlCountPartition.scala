@@ -31,7 +31,8 @@ object UrlCountPartition {
       val host = new URL(url).getHost
       // 想使用 partitionBy 的话，这里需要k-v形式的
       (host, (url, t._2))
-    })
+    }).cache()   // cache会将数据缓存到内存当中。cache是一个Transformation,是延时加载的。collect是Action，他一调用就会执行缓存。
+    // 缓存会调用persist底层方法。如果要清缓存调用   unpersist(true)。
 
     // 自定义分区器
     // 去重，得到所有不重复的 host

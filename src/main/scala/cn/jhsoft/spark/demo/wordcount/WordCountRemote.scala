@@ -3,12 +3,19 @@ package cn.jhsoft.spark.demo.wordcount
 import org.apache.spark.{SparkConf, SparkContext}
 
 /**
-  * Created by chen on 2017/7/29.
+  * Created by chen on 2017/7/30.
+  * 远程调试
   */
-object WordCount {
+object WordCountRemote {
 
   def main(args: Array[String]): Unit = {
+
+    // "/Users/chen/java/spark/target/spark-1.0.jar" 这个路径字符串 是点右键 Copy Path来的
+
     val config = new SparkConf().setAppName("WC")
+        .setJars(Array("/Users/chen/java/spark/target/spark-1.0.jar"))
+        .setMaster("spark://s1:7077")
+
     val sc = new SparkContext(config)
     sc.textFile(args(0)).flatMap(_.split(" ")).map((_, 1)).reduceByKey(_+_).sortBy(_._2, false).saveAsTextFile(args(1))
 
