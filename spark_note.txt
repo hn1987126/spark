@@ -521,6 +521,25 @@ sqlcontext.sql("desc t_person").show
 编程时需要导入隐式转换，不然无法使用 rdd.toDF
 import sqlContext.implicits._
 
+## 结果转为json存入到hdfs
+sqlcontext.sql("select * from t_person order by age desc limit 2").write.json("hdfs://s1:9000/json")
+
+## 介绍下 Parquest File这是一种经压缩的对数据进行列式存储的。比ORC还有优势。
+
+## 保存结果 save和write都可以用，save的话，在后面的参数上加 json
+result.save("hdfs://s1:9000/json")   // 如果不指定类型，则是 Parquest File 这种压缩形式的列式存储
+result.save("hdfs://s1:9000/json", "json")
+
+#以JSON文件格式覆写HDFS上的JSON文件
+import org.apache.spark.sql.SaveMode._
+result.save("hdfs://s1:9000/json", "json" , Overwrite)
+
+## 重新加载以前的处理结果（可选）
+-- 以json的形式来读取数据。读进来以后便是 DataFrame，直接就把json里的key-v映射到字段上了
+sqlContext.load("hdfs://s1:9000/json", "json")
+
+
+
 
 
 
