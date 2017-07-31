@@ -105,6 +105,7 @@ source /etc/profile
 ###
 Spark集群配置完毕，目前是1个Master，2个Work（s1上既有master也有work），在 s1 上启动Spark集群
 /export/servers/spark/sbin/start-all.sh
+在这之前需要启动hdfs    start-dfs.sh
 
 ###
 启动后执行jps命令，主节点上有Master进程，其他子节点上有Work进行，登录Spark管理界面查看集群状态（主节点）：http://s1:8080/
@@ -203,9 +204,9 @@ rdd8.distinct.sortBy(x=>x).collect
 #intersection交集
 val rdd9 = rdd6.intersection(rdd7)
 val rdd1 = sc.parallelize(List(("tom", 1), ("jerry", 2), ("kitty", 3)))
-val rdd2 = sc.parallelize(List(("jerry", 9), ("tom", 8), ("shuke", 7), ("tom", 2))
+val rdd2 = sc.parallelize(List(("jerry", 9), ("tom", 8), ("shuke", 7), ("tom", 2)))
 
-#join
+#join  k,v形式的才能用join，这需要用上两行的 rdd1和rdd2
 val rdd3 = rdd1.join(rdd2)
 val rdd3 = rdd1.leftOuterJoin(rdd2)
 val rdd3 = rdd1.rightOuterJoin(rdd2)
@@ -452,7 +453,7 @@ RDD是分布式的数据集，里面有HDFS，Mysql，还有集合等。
 textFile方法会产生两个RDD，1、HadoopRDD，2、MapPartitionRDD【调用了spark的map方法，把第一步hadoop返回的偏移量去掉了(hadoop返回了，偏移量和行内容)】
 flatMap 方法会产生一个RDD   MapPartitionRDD
 map 方法会产生一个RDD   MapPartitionRDD
-reduceByKey 方法会产生一个RDD   ShuffledRDD
+reduceByKey 方法会产生一个RDD   ShuffledRDD  [下游到上游来拉取数据的过程，那就要等上游的数据处理完才能拉]
 saveToTextFile  方法产生一个RDD    MapPartitionRDD
 
 ### jps可知，启动spark-shell命令行，它也是一个app任务，在worker机器上会有这个进程  CoarseGrainedExecutorBackend  也就是Executor
@@ -463,8 +464,7 @@ debug调试后，可以在本地电脑上 jps看到，会多了一个 WordCountR
 
 ### spark的缓存机制，在之前的方法之后加个   cache()  就代表缓存起来，他底层是调persist()方法。 其中StorageLevel级别为-> MEMORY_ONLY只放内存里，MEMORY_ONLY_2是指内存中放2份，一份在本机，一份在别的机器
 如：val rdd1 = sc.textFile("hdfs:xxx")
-rdd1.cache()
-### 释放缓存   rdd1.unpersist(true)
+rdd1.cache()### 释放缓存   rdd1.unpersist(true)
 
 ###### 设置还原点：checkpoint。这个适合于，某个计算的结果很重要，他很慢，而且他下面有很多其他的计算要依赖他。这时适合把他放入还原点checkpoint。
 ###### 设置了checkpoint，并且有Action执行的时候，会把这之前依赖的父动作给删掉，将来有意外要恢复的时候也是从checkpoint里进行恢复，而不从血统轨迹里恢复。
@@ -475,4 +475,84 @@ rdd.count   这时是Action，会把checkpoint提交，此时hdfs目录的根目
 
 ##### RDD  有方向无闭环 DAG，DAG最后的边界，是Action的时候。
 DAG 的名字叫 有向无环图。
+
+##### pepiline 流水线
+ShuffledRDD 之前的是一个流水线，是上游，是窄依赖   也就是wordcount里的 reduceByKey之前的动作。
+reduceByKey和他之后的saveAsTextFile，他们两又是一条流水线。
+
+##### 流程：
+Driver提交submit任务，Master根据提交任务时指定的参数如内存cpu核数等决定要用哪几台 worker来执行任务。确定了以后，就没有Master什么 事了。
+然后Driver就和Worker建立了通信，Driver会把任务给Worker，Worker处理完后给Driver反馈。
+如果是处理完后需要写数据如把处理结果写入mysql或redis保存，最好是由Worker直接操作，因为是有多台Worker并发来操作，速度更快。而且 省去了给Driver再反馈的网络开销。
+
+##### RDD的依赖关系：
+RDD和他的父RDD有依赖关系，分 宽依赖（wide dependency）和 窄依赖（narrow dependency）。
+窄依赖 如map、filter、union等是在本分区进行
+join大多情况下是宽依赖，只有一种情况是窄依赖（先进行groupBy后）。窄依赖相当于独生子女，宽依赖相当于多生子女。
+宽依赖 就是可以切一刀，它之前是一阶段，之后是一阶段。
+
+##### Stage是阶段的意思。
+
+##### spartSQL
+在spark Shell终端里进行测试：
+sqlContext
+val rdd=sc.textFile("hdfs://s1:9000/wordcount/input/1.txt").map(_.split(","))
+case class Person(id:Long, name:String, age:Int)
+val personRDD = rdd.map(x=>Person(x(0).toLong, x(1), x(2).toInt))
+val df = personRDD.toDF
+
+## DSL风格
+df.show    // 这是Action
+df.select("id", "name").show   //select是Transfotion
+df.filter(col("age")>=18).show
+
+## SQL风格
+df.registerTempTable("t_person")
+sqlcontext.sql("select * from t_person order by age desc limit 2").show
+sqlcontext.sql("desc t_person").show
+
+## 编程需要引依赖
+<dependency>
+    <groupId>org.apache.spark</groupId>
+    <artifactId>spark-sql_2.10</artifactId>
+    <version>${spark.version}</version>
+</dependency>
+
+编程时需要导入隐式转换，不然无法使用 rdd.toDF
+import sqlContext.implicits._
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
