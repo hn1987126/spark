@@ -35,4 +35,4 @@ object InferringSchema {
   }
 }
 //case class一定要放到外面
-case class Person(id: Int, name: String, age: Int)
+//case class Person1(id: Int, name: String, age: Int)

@@ -33,5 +33,6 @@ object SQLDemo {
 
 }
 
+//case class一定要放到外面
 case class Person(id:Long, name:String, age:Int)
 

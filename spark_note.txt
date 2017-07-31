@@ -506,10 +506,10 @@ df.show    // 这是Action
 df.select("id", "name").show   //select是Transfotion
 df.filter(col("age")>=18).show
 
-## SQL风格
+## SQL风格  注册临时表
 df.registerTempTable("t_person")
-sqlcontext.sql("select * from t_person order by age desc limit 2").show
-sqlcontext.sql("desc t_person").show
+sqlContext.sql("select * from t_person order by age desc limit 2").show
+sqlContext.sql("desc t_person").show
 
 ## 编程需要引依赖
 <dependency>
@@ -522,13 +522,15 @@ sqlcontext.sql("desc t_person").show
 import sqlContext.implicits._
 
 ## 结果转为json存入到hdfs
-sqlcontext.sql("select * from t_person order by age desc limit 2").write.json("hdfs://s1:9000/json")
+sqlContext.sql("select * from t_person order by age desc limit 2").write.json("hdfs://s1:9000/json")
+导出为这种格式了 {"id":7,"name":"女","age":45}
+{"id":4,"name":"女","age":40}   一行一个
 
 ## 介绍下 Parquest File这是一种经压缩的对数据进行列式存储的。比ORC还有优势。
 
 ## 保存结果 save和write都可以用，save的话，在后面的参数上加 json
 result.save("hdfs://s1:9000/json")   // 如果不指定类型，则是 Parquest File 这种压缩形式的列式存储
-result.save("hdfs://s1:9000/json", "json")
+result.save("hdfs://s1:9000/json/json1", "json")
 
 #以JSON文件格式覆写HDFS上的JSON文件
 import org.apache.spark.sql.SaveMode._
@@ -537,6 +539,59 @@ result.save("hdfs://s1:9000/json", "json" , Overwrite)
 ## 重新加载以前的处理结果（可选）
 -- 以json的形式来读取数据。读进来以后便是 DataFrame，直接就把json里的key-v映射到字段上了
 sqlContext.load("hdfs://s1:9000/json", "json")
+val s1 = sqlContext.load("hdfs://s1:9000/json", "json")
+s1.show
+
+
+######## 配置spark支持hive
+需要在spark的配置文件目录中，把 hive-site.xml从hive那拷过来，把hdfs-site.xml从hadoop那拷过来
+还需要把sql的驱动，拷到spark的lib目录下。
+或者在启动的时候把驱动的位置加上  bin/spark-sql  --driver-class-path /home/hadoop/apps/hive/lib/mysql-connector-xx.jar
+
+cp -r /home/hadoop/apps/hadoop-2.6.4/etc/hadoop/hdfs-site.xml /export/servers/spark/conf/
+cp -r /home/hadoop/apps/hive/conf/hive-site.xml /export/servers/spark/conf/
+cp -r /home/hadoop/apps/hive/lib/mysql-connector-java-5.1.28.jar /export/servers/spark/lib/
+
+
+## 详细步骤
+1.安装hive 并设置mysql 中 hive这个库的字符集
+alter database hive character set latin1;
+ALTER TABLE hive.* DEFAULT CHARACTER SET latin1;
+
+2.将配置好的hive-site.xml放入$SPARK-HOME/conf目录下
+
+3.启动spark-shell时指定mysql连接驱动位置
+spark-shell --master spark://s1:7077 --executor-memory 512m --total-executor-cores 1 --driver-class-path /home/hadoop/apps/hive/lib/mysql-connector-java-5.1.28.jar
+
+
+4.使用sqlContext.sql调用HQL
+sqlContext.sql("select * from spark.person limit 2")
+
+或使用org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.HiveContext
+val hiveContext = new HiveContext(sc)
+hiveContext.sql("select * from spark.person")
+
+###############################################################################
+spark-sql \
+ --master spark://s1:7077 \
+ --executor-memory 512m \
+ --total-executor-cores 1 \
+ --driver-class-path /home/hadoop/apps/hive/lib/mysql-connector-java-5.1.28.jar
+
+ spark-sql --master spark://s1:7077 --executor-memory 512m --total-executor-cores 1
+
+
+##### spark远程调试，更详细的在最后
+远程Master机器：：
+在conf/spark-env.conf中最后加入如下一行
+export SPARK_MASTER_OPTS="-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=10000"
+在本地IDEA里，之前运行时是添加Application，现在是添加一个Remote，在里面填服务器的ip地址和端口
+单独启动Master    sbin/spark-daemon.sh
+
+远程Worker机器的话，改成 export SPARK_WORKER_OPTS
+export SPARK_WORKER_OPTS="-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=10001"
+启动  sbin/start-slave.sh
 
 
 
@@ -575,3 +630,81 @@ sqlContext.load("hdfs://s1:9000/json", "json")
 
 
 
+
+
+############################################################################################################
+############################################################################################################
+远程调试
+############################################################################################################
+
+
+setJars
+
+--------------------------------------------------------------------------------------------------------------
+
+start-all.sh -> start-master.sh  -> start-slaves.sh
+
+//Master启动的脚本
+start-master.sh  -> spark-daemon.sh start org.apache.spark.deploy.master.Master
+
+
+//Worer的启动过程
+salves.sh   ->  通过读取slaves 通过ssh的方式启动远端的worker
+spark-daemon.sh start org.apache.spark.deploy.worker.Worker
+
+
+Master和Worker是两个Java进程  他们启动的时候会加载一些参数 spark-env.sh这里边的环境变量
+
+
+如何是使用远程debug
+
+在Master端的spark-env.sh文件中添加如下参数
+export SPARK_MASTER_OPTS="-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=10000"
+
+start-master.sh
+执行完这个脚本
+jps
+4828 -- main class information unavailable
+4860 Jps
+
+通过一个IDE  建立一个remote application
+172.16.0.11 10000
+在本地的代码打断点
+debug按钮开始调试
+
+---------------------------------------------------------------------------------------------------------
+
+在Worker所在的配置文件中添加一个环境变量
+export SPARK_WORKER_OPTS="-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=10001"
+start-slave.sh spark://node-1.itcast.cn:7077
+
+执行jps命令
+2891 -- main class information unavailable
+2923 Jps
+
+用一个IDE工具连接 建立一个remote application
+172.16.0.12 10001
+在本地的代码打断点
+debug按钮开始调试
+
+---------------------------------------------------------------------------------------------------------
+Debug app （--driver-java-options）
+
+bin/spark-submit --class cn.itcast.spark.WC --master spark://node-1.itcast.cn:7077 --driver-java-options "-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=10002" /root/bigdata-2.0.jar hdfs://node-1.itcast.cn:9000/words.txt hdfs://node-1.itcast.cn:9000/wordsout
+
+任务提交流程
+spark-submit --class cn.itcast.spark.WordCount
+
+bin/spark-clas -> org.apache.spark.deploy.SparkSubmit 调用这个类的main方法
+
+doRunMain方法中传进来一个自定义spark应用程序的main方法class cn.itcast.spark.WordCount
+
+通过反射拿到类的实例的引用mainClass = Utils.classForName(childMainClass)
+
+在通过反射调用class cn.itcast.spark.WordCount的main方法
+
+
+用一个IDE工具连接 建立一个remote application
+172.16.0.13 10002
+在本地的代码打断点
+debug按钮开始调试

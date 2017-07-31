@@ -6,9 +6,12 @@ import org.apache.spark.sql.{SQLContext, Row}
 import org.apache.spark.sql.types.{StringType, IntegerType, StructField, StructType}
 import org.apache.spark.{SparkConf, SparkContext}
 
+/**
+  * DataFrame 把结果写入Mysql
+  */
 object JdbcRDD {
   def main(args: Array[String]) {
-    val conf = new SparkConf().setAppName("MySQL-Demo")
+    val conf = new SparkConf().setAppName("MySQL-Demo").setMaster("local")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
     //通过并行化创建RDD
