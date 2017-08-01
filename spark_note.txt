@@ -597,10 +597,17 @@ export SPARK_WORKER_OPTS="-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend
 
 #############################################################################################################
 spark 从flume里拉数据
+配置flume，在conf里的myconf里加两个文件，在本项目的shell目录下flume_conf目录下
+创建监控目录  mkdir -p /export/data/flume
+启动 flume：
+/home/hadoop/apps/flume/bin/flume-ng agent --conf /home/hadoop/apps/flume/conf --conf-file /home/hadoop/apps/flume/conf/myconf/flume_push.conf --name a1 -Dflume.root.logger=INFO,console &
+/home/hadoop/apps/flume/bin/flume-ng agent --conf /home/hadoop/apps/flume/conf --conf-file /home/hadoop/apps/flume/conf/myconf/flume_poll.conf --name a1 -Dflume.root.logger=INFO,console &
 
+用poll这种方式的，也就是本机去flume上拉取的方式：
 需要把这三个包放在flume的lib目录下   可以从官网下载http://spark.apache.org/docs/latest/streaming-flume-integration.html，或者从百度网盘里下
-commons-lang-2.5.jar
+commons-lang3-3.3.2.jar
 scala-library-2.10.5.jar
+spark-streaming-flume-sink_2.10-1.6.1.jar
 
 直连式的：
 一个kafka里的partition分区对应DStream里RDD的一个分区。

@@ -13,17 +13,19 @@ object StreamingWordCount {
     // 设置日志级别
     LoggerLevels.setStreamingLogLevels()
 
-    val conf = new SparkConf().setAppName("StreamingWordCount")
+    //StreamingContext
+    val conf = new SparkConf().setAppName("StreamingWordCount").setMaster("local[2]")
     val sc = new SparkContext(conf)
-    val scc = new StreamingContext(sc, Seconds(5))
+    val ssc = new StreamingContext(sc, Seconds(5))
+    //接收数据
+    val ds = ssc.socketTextStream("s1", 8888)
 
-    // 接收数据
-    val ds = scc.socketTextStream("s1", 8888)
+    //DStream是一个特殊的RDD
+    //hello tom hello jerry
     val result = ds.flatMap(_.split(" ")).map((_, 1)).reduceByKey(_+_)
-    result.print()
-    scc.start()
-    scc.awaitTermination()
-
+    //打印结果
+    ssc.start()
+    ssc.awaitTermination()
 
   }
 
