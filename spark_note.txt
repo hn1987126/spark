@@ -579,7 +579,7 @@ spark-sql \
  --total-executor-cores 1 \
  --driver-class-path /home/hadoop/apps/hive/lib/mysql-connector-java-5.1.28.jar
 
- spark-sql --master spark://s1:7077 --executor-memory 512m --total-executor-cores 1
+ spark-sql --master spark://s1:7077 --executor-memory 512m --total-executor-cores 1 --driver-class-path /home/hadoop/apps/hive/lib/mysql-connector-java-5.1.28.jar
 
 
 ##### spark远程调试，更详细的在最后
@@ -595,7 +595,26 @@ export SPARK_WORKER_OPTS="-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend
 
 
 
+#############################################################################################################
+spark 从flume里拉数据
 
+需要把这三个包放在flume的lib目录下   可以从官网下载http://spark.apache.org/docs/latest/streaming-flume-integration.html，或者从百度网盘里下
+commons-lang-2.5.jar
+scala-library-2.10.5.jar
+
+直连式的：
+一个kafka里的partition分区对应DStream里RDD的一个分区。
+要想效率比较高，最好在kafka建主题的时候，分区数量和 Spark的Worker数量相同，那样的话，就可以一个Worker处理一个kafka分区的数据。
+但是需要自己来管理偏移量。
+
+窗口函数：
+是计算一段时间内的数据。
+
+第二个参数是  windows的时间。
+第三个参数是  滑动的时间。
+
+假如生成RDD的时间间隔是5秒，windows的时间是15秒，滑动的时间是10秒。
+等于是 15秒为一窗口，一窗口里有3个RDD的数据。这个窗口每10秒滑动一次。
 
 
 
