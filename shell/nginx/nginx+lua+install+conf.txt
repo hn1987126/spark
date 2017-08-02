@@ -1,44 +1,44 @@
 yum -y install gcc perl pcre-devel openssl openssl-devel
 
-ÉÏ´«LuaJIT-2.0.4.tar.gz²¢°²×°LuaJIT
+ä¸Šä¼ LuaJIT-2.0.4.tar.gzå¹¶å®‰è£…LuaJIT
 tar -zxvf LuaJIT-2.0.4.tar.gz -C /usr/local/src/
 cd /usr/local/src/LuaJIT-2.0.4/
 make && make install PREFIX=/usr/local/luajit
 
-#ÉèÖÃ»·¾³±äÁ¿
+#è®¾ç½®ç¯å¢ƒå˜é‡
 export LUAJIT_LIB=/usr/local/luajit/lib
 export LUAJIT_INC=/usr/local/luajit/include/luajit-2.0
 
-#´´½¨modules±£´ænginxµÄÄ£¿é
+#åˆ›å»ºmodulesä¿å­˜nginxçš„æ¨¡å—
 mkdir -p /usr/local/nginx/modules
 
-#ÉÏ´«openresty-1.9.7.3.tar.gzºÍÒÀÀµµÄÄ£¿élua-nginx-module-0.10.0.tar¡¢ngx_devel_kit-0.2.19.tar¡¢ngx_devel_kit-0.2.19.tar¡¢echo-nginx-module-0.58.tar.gz
-#½«ÒÀÀµµÄÄ£¿éÖ±½Ó½âÑ¹µ½/usr/local/nginx/modulesÄ¿Â¼¼´¿É£¬²»ĞèÒª±àÒë°²×°
+#ä¸Šä¼ openresty-1.9.7.3.tar.gzå’Œä¾èµ–çš„æ¨¡å—lua-nginx-module-0.10.0.tarã€ngx_devel_kit-0.2.19.tarã€ngx_devel_kit-0.2.19.tarã€echo-nginx-module-0.58.tar.gz
+#å°†ä¾èµ–çš„æ¨¡å—ç›´æ¥è§£å‹åˆ°/usr/local/nginx/modulesç›®å½•å³å¯ï¼Œä¸éœ€è¦ç¼–è¯‘å®‰è£…
 tar -zxvf lua-nginx-module-0.10.0.tar.gz -C /usr/local/nginx/modules/
 tar -zxvf set-misc-nginx-module-0.29.tar.gz -C /usr/local/nginx/modules/
 tar -zxvf ngx_devel_kit-0.2.19.tar.gz -C /usr/local/nginx/modules/
 tar -zxvf echo-nginx-module-0.58.tar.gz -C /usr/local/nginx/modules/
- 
-#½âÑ¹openresty-1.9.7.3.tar.gz
+
+#è§£å‹openresty-1.9.7.3.tar.gz
 tar -zxvf openresty-1.9.7.3.tar.gz -C /usr/local/src/
 cd /usr/local/src/openresty-1.9.7.3/
-#±àÒë°²×°
+#ç¼–è¯‘å®‰è£…
 ./configure --prefix=/usr/local/openresty --with-luajit && make && make install
 
-#ÉÏ´«nginx
+#ä¸Šä¼ nginx
 tar -zxvf nginx-1.8.1.tar.gz -C /usr/local/src/
 cd /usr/local/src/nginx-1.8.1/
-#±àÒënginx²¢Ö§³ÖÆäËûÄ£¿é
+#ç¼–è¯‘nginxå¹¶æ”¯æŒå…¶ä»–æ¨¡å—
 ./configure --prefix=/usr/local/nginx \
 	--with-ld-opt="-Wl,-rpath,/usr/local/luajit/lib" \
     --add-module=/usr/local/nginx/modules/ngx_devel_kit-0.2.19 \
     --add-module=/usr/local/nginx/modules/lua-nginx-module-0.10.0 \
     --add-module=/usr/local/nginx/modules/set-misc-nginx-module-0.29 \
-    --add-module=/usr/local/nginx/modules/echo-nginx-module-0.58 
+    --add-module=/usr/local/nginx/modules/echo-nginx-module-0.58
 make -j2
 make install
 
-#ĞŞ¸ÄnginxÅäÖÃÎÄ¼ş
+#ä¿®æ”¹nginxé…ç½®æ–‡ä»¶
 worker_processes  2;
 
 events {
@@ -50,7 +50,7 @@ http {
     default_type  application/octet-stream;
 
     log_format tick "$msec^A$remote_addr^A$u_domain^A$u_url^A$u_title^A$u_referrer^A$u_sh^A$u_sw^A$u_cd^A$u_lang^A$http_user_agent^A$u_utrace^A$u_account";
-    
+
     access_log  logs/access.log  tick;
 
     sendfile        on;
@@ -61,39 +61,39 @@ http {
         listen       80;
         server_name  localhost;
 		location /log.gif {
-			#Î±×°³ÉgifÎÄ¼ş
-			default_type image/gif;    
-			#±¾Éí¹Ø±Õaccess_log£¬Í¨¹ısubrequest¼ÇÂ¼log
+			#ä¼ªè£…æˆgifæ–‡ä»¶
+			default_type image/gif;
+			#æœ¬èº«å…³é—­access_logï¼Œé€šè¿‡subrequestè®°å½•log
 			access_log off;
-		
+
 			access_by_lua "
-				-- ÓÃ»§¸ú×ÙcookieÃûÎª__utrace
-				local uid = ngx.var.cookie___utrace        
+				-- ç”¨æˆ·è·Ÿè¸ªcookieåä¸º__utrace
+				local uid = ngx.var.cookie___utrace
 				if not uid then
-					-- Èç¹ûÃ»ÓĞÔòÉú³ÉÒ»¸ö¸ú×Ùcookie£¬Ëã·¨Îªmd5(Ê±¼ä´Á+IP+¿Í»§¶ËĞÅÏ¢)
+					-- å¦‚æœæ²¡æœ‰åˆ™ç”Ÿæˆä¸€ä¸ªè·Ÿè¸ªcookieï¼Œç®—æ³•ä¸ºmd5(æ—¶é—´æˆ³+IP+å®¢æˆ·ç«¯ä¿¡æ¯)
 					uid = ngx.md5(ngx.now() .. ngx.var.remote_addr .. ngx.var.http_user_agent)
-				end 
+				end
 				ngx.header['Set-Cookie'] = {'__utrace=' .. uid .. '; path=/'}
 				if ngx.var.arg_domain then
-				-- Í¨¹ısubrequestµ½/i-log¼ÇÂ¼ÈÕÖ¾£¬½«²ÎÊıºÍÓÃ»§¸ú×Ùcookie´ø¹ıÈ¥
+				-- é€šè¿‡subrequeståˆ°/i-logè®°å½•æ—¥å¿—ï¼Œå°†å‚æ•°å’Œç”¨æˆ·è·Ÿè¸ªcookieå¸¦è¿‡å»
 					ngx.location.capture('/i-log?' .. ngx.var.args .. '&utrace=' .. uid)
-				end 
-			";  
-		
-			#´ËÇëÇó²»»º´æ
+				end
+			";
+
+			#æ­¤è¯·æ±‚ä¸ç¼“å­˜
 			add_header Expires "Fri, 01 Jan 1980 00:00:00 GMT";
 			add_header Pragma "no-cache";
 			add_header Cache-Control "no-cache, max-age=0, must-revalidate";
-		
-			#·µ»ØÒ»¸ö1¡Á1µÄ¿ÕgifÍ¼Æ¬
+
+			#è¿”å›ä¸€ä¸ª1Ã—1çš„ç©ºgifå›¾ç‰‡
 			empty_gif;
-		}   
-	
+		}
+
 		location /i-log {
-			#ÄÚ²¿location£¬²»ÔÊĞíÍâ²¿Ö±½Ó·ÃÎÊ
+			#å†…éƒ¨locationï¼Œä¸å…è®¸å¤–éƒ¨ç›´æ¥è®¿é—®
 			internal;
-		
-			#ÉèÖÃ±äÁ¿£¬×¢ÒâĞèÒªunescape
+
+			#è®¾ç½®å˜é‡ï¼Œæ³¨æ„éœ€è¦unescape
 			set_unescape_uri $u_domain $arg_domain;
 			set_unescape_uri $u_url $arg_url;
 			set_unescape_uri $u_title $arg_title;
@@ -104,16 +104,16 @@ http {
 			set_unescape_uri $u_lang $arg_lang;
 			set_unescape_uri $u_utrace $arg_utrace;
 			set_unescape_uri $u_account $arg_account;
-		
-			#´ò¿ªÈÕÖ¾
+
+			#æ‰“å¼€æ—¥å¿—
 			log_subrequest on;
-			#¼ÇÂ¼ÈÕÖ¾µ½ma.log£¬Êµ¼ÊÓ¦ÓÃÖĞ×îºÃ¼Óbuffer£¬¸ñÊ½Îªtick
+			#è®°å½•æ—¥å¿—åˆ°ma.logï¼Œå®é™…åº”ç”¨ä¸­æœ€å¥½åŠ bufferï¼Œæ ¼å¼ä¸ºtick
 			access_log /var/nginx_logs/track.log tick;
-		
-			#Êä³ö¿Õ×Ö·û´®
+
+			#è¾“å‡ºç©ºå­—ç¬¦ä¸²
 			echo '';
-		}	
-	
+		}
+
     }
 }
 
@@ -123,13 +123,13 @@ http {
 <script type="text/javascript">
 	var _maq = _maq || [];
 	_maq.push(['type', '1']);
- 
+
 	(function() {
-		var ma = document.createElement('script'); 
+		var ma = document.createElement('script');
 		ma.type = 'text/javascript';
 		ma.async = true;
 		ma.src = 'http://flow.itcast.cn/track.js';
-		var s = document.getElementsByTagName('script')[0]; 
+		var s = document.getElementsByTagName('script')[0];
 		s.parentNode.insertBefore(ma, s);
 	})();
 </script>
@@ -138,24 +138,24 @@ http {
 
 (function () {
     var params = {};
-    //Document¶ÔÏóÊı¾İ
+    //Documentå¯¹è±¡æ•°æ®
     if(document) {
-        params.domain = document.domain || ''; 
-        params.url = document.URL || ''; 
-        params.title = document.title || ''; 
-        params.referrer = document.referrer || ''; 
-    }   
-    //Window¶ÔÏóÊı¾İ
+        params.domain = document.domain || '';
+        params.url = document.URL || '';
+        params.title = document.title || '';
+        params.referrer = document.referrer || '';
+    }
+    //Windowå¯¹è±¡æ•°æ®
     if(window && window.screen) {
         params.sh = window.screen.height || 0;
         params.sw = window.screen.width || 0;
         params.cd = window.screen.colorDepth || 0;
-    }   
-    //navigator¶ÔÏóÊı¾İ
+    }
+    //navigatorå¯¹è±¡æ•°æ®
     if(navigator) {
-        params.lang = navigator.language || ''; 
-    }   
-    //½âÎö_maqÅäÖÃ
+        params.lang = navigator.language || '';
+    }
+    //è§£æ_maqé…ç½®
     if(_maq) {
         for(var i in _maq) {
             switch(_maq[i][0]) {
@@ -164,19 +164,19 @@ http {
                     break;
                 default:
                     break;
-            }   
-        }   
-    }   
-    //Æ´½Ó²ÎÊı´®
-    var args = ''; 
+            }
+        }
+    }
+    //æ‹¼æ¥å‚æ•°ä¸²
+    var args = '';
     for(var i in params) {
         if(args != '') {
             args += '&';
-        }   
+        }
         args += i + '=' + encodeURIComponent(params[i]);
-    }   
- 
-    //Í¨¹ıImage¶ÔÏóÇëÇóºó¶Ë½Å±¾
+    }
+
+    //é€šè¿‡Imageå¯¹è±¡è¯·æ±‚åç«¯è„šæœ¬
     var img = new Image(1, 1); 
     img.src = 'http://flow.itcast.cn/log.gif?' + args;
 })();

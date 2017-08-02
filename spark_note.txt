@@ -627,7 +627,15 @@ spark-streaming-flume-sink_2.10-1.6.1.jar
 等于是 15秒为一窗口，一窗口里有3个RDD的数据。这个窗口每10秒滑动一次。
 
 
+
+
 ############################################################################################################
+############################################################################################################
+############# 游戏项目日志采集
+############################################################################################################
+## nginx相关的，在本项目shell/nginx 这目录下，具体看 nginx+lua+install+conf.txt
+
+
 大数据领域出现了新的技术 ELK Stack  ELK(ElasticSearch, Logstash, Kibana)搭建实时日志分析平台
 E 是elasticsearch 全文检索
 L Logstash是类似flume这样日志收集的
@@ -640,7 +648,7 @@ logstash-2.3.1.tar.gz，上传到服务器
 
 logstash是用JRuby语言开发的，所以要安装JDK
 
-tar -zxvf soft/logstash-2.3.1.tar.gz -C /export/servers
+tar -zxvf soft/es/logstash-2.3.1.tar.gz -C /export/servers
 cd /export/servers
 mv logstash-2.3.1 logstash
 cd logstash
@@ -674,22 +682,427 @@ EOF
 ### 测试：
 启动zkServer.sh start 两台机器
 启动两台机器的 kafka
-产生测试数据：使用下面这个脚本：
+nohup /export/servers/kafka/bin/kafka-server-start.sh  /export/servers/kafka/config/server.properties >/dev/null 2>&1 &
+#在kafka上建accesslog主题
+/export/servers/kafka/bin/kafka-topics.sh --create --zookeeper s1:2181 --replication-factor 2 --partitions 4 --topic accesslog
+
 # 建立测试日志目录：
-mkdir -h /export/data/logstash_sources/log/
-# 脚本内容：
+mkdir -p /export/data/logstash_sources/log/
+# 产生测试数据：使用下面这个脚本：
+
+cat >> createdata.sh << EOF
 #!/bin/bash
 for((i=0;i<=5;i++));
     do echo "{"time" : "1463904510.776","client" : "192.168.21.43","domain" : "www.lfg176.com","url" : "http://www.lfg176.com/","title" : "www.lfg176.com","referrer": "","sh" : "864","sw" : "1536","cd" : "24","lang" : "zh-CN","trace" : "1a6af4fc4a7d6609c1f2b4c3b0f3a2b9","type" : "1", "num":"$i"}" >>/export/data/logstash_sources/log/test.log;
 done
+EOF
+chmod +x createdata.sh
+./createdata.sh
+
+## 消费kafka
+kafka-console-consumer.sh --zookeeper s2:2181 --from-beginning --topic accesslog
 
 
 
 
 
+############################################################################################################
+########ElasticSearch 安装
+############################################################################################################
+http://www.elastic.co/guide/en/elasticsearch/reference/current/setup-configuration.html
+https://github.com/elastic/elasticsearch
+
+tar -zxvf soft/es/elasticsearch-2.3.1.tar.gz -C /export/servers
+cd /export/servers
+mv elasticsearch-2.3.1 elasticsearch
+cd elasticsearch
+
+mkdir -p /export/data
+cat >> config/elasticsearch.yml << EOF
+#集群名称，通过组播的方式通信，通过名称判断属于哪个集群
+cluster.name: hadoop
+#节点名称，要唯一
+node.name: s1
+#数据存放位置
+path.data: /export/data/es/data
+#日志存放位置
+path.logs: /export/data/es/logs
+#es绑定的ip地址
+network.host: s1
+# 默认端口就是9200，所以不需要加此行
+# http.port: 9200
+#初始化时可进行选举的节点，不依赖于zokeeper，自己有选举的模块
+discovery.zen.ping.unicast.hosts: ["s1", "s2", "s3", "s4"]
+EOF
+
+#拷贝到其他机器
+cd ../
+scp -r elasticsearch s2:$PWD
+#在其他机器执行：
+mkdir -p /export/data
+sed -i "/^node.name/c\node.name: s2" /export/servers/elasticsearch/config/elasticsearch.yml
+sed -i "/^network.host/c\network.host: s2" /export/servers/elasticsearch/config/elasticsearch.yml
+
+
+## 启动es，需要在本机和其他机器都启动
+/export/servers/elasticsearch/bin/elasticsearch -d
+
+## 用浏览器访问es所在机器的9200端口
+http://s1:9200/
+
+## 杀掉进程
+kill `ps -ef | grep Elasticsearch | grep -v grep | awk '{print $2}'`
+
+------------------------------------------------------------------------------------------------------------------
+#es安装插件下载es的head插件
+/export/servers/elasticsearch/bin/plugin install mobz/elasticsearch-head
+
+# 本地方式离线安装head插件，这个插件是提供强大的web管理界面，可以在那查看索引的全部信息，非常强大。
+/export/servers/elasticsearch/bin/plugin install file:///home/hadoop/soft/es/elasticsearch-head-master.zip
+
+#访问head管理页面
+http://s1:9200/_plugin/head
+
+## RESTful接口URL的格式：
+http://localhost:9200/<index>/<type>/[<id>]
+其中index、type是必须提供的。
+id是可选的，不提供es会自动生成。
+index、type将信息进行分层，利于管理。
+index可以理解为数据库；type理解为数据表；id相当于数据库表中记录的主键，是唯一的。
+
+#向store索引中添加一些书籍
+curl -XPUT 'http://s1:9200/store/books/1' -d '{
+  "title": "Elasticsearch: The Definitive Guide",
+  "name" : {
+    "first" : "Zachary",
+    "last" : "Tong"
+  },
+  "publish_date":"2015-02-06",
+  "price":"49.99"
+}'
+
+#通过浏览器查询
+http://s1:9200/store/books/1
+
+#在linux中通过curl的方式查询
+curl -XGET 'http://s1:9200/store/books/1'
+
+#在添加一个书的信息
+curl -XPUT 'http://s1:9200/store/books/2' -d '{
+  "title": "Elasticsearch Blueprints",
+  "name" : {
+    "first" : "Vineeth",
+    "last" : "Mohan"
+  },
+  "publish_date":"2015-06-06",
+  "price":"35.99"
+}'
+
+
+# 通过ID获得文档信息
+curl -XGET 'http://s1:9200/bookstore/books/1'
+
+#在浏览器中查看
+http://s1:9200/bookstore/books/1
+
+# 通过_source获取指定的字段
+curl -XGET 'http://s1:9200/store/books/1?_source=title'
+curl -XGET 'http://s1:9200/store/books/1?_source=title,price'
+curl -XGET 'http://s1:9200/store/books/1?_source'
+
+#可以通过覆盖的方式更新
+curl -XPUT 'http://s1:9200/store/books/1' -d '{
+  "title": "Elasticsearch: The Definitive Guide",
+  "name" : {
+    "first" : "Zachary",
+    "last" : "Tong"
+  },
+  "publish_date":"2016-02-06",
+  "price":"99.99"
+}'
+
+# 或者通过 _update  API的方式单独更新你想要更新的
+curl -XPOST 'http://s1:9200/store/books/1/_update' -d '{
+  "doc": {
+     "price" : 88.88
+  }
+}'
+
+curl -XGET 'http://s1:9200/store/books/1'
+
+#删除一个文档
+curl -XDELETE 'http://s1:9200/store/books/1'
+
+
+# 最简单filter查询
+# SELECT * FROM books WHERE price = 35.99
+# filtered 查询价格是35.99的
+curl -XGET 'http://s1:9200/store/books/_search' -d '{
+    "query" : {
+        "filtered" : {
+            "query" : {
+                "match_all" : {}
+            },
+            "filter" : {
+                "term" : {
+                    "price" : 35.99
+                  }
+              }
+        }
+    }
+}'
+
+#指定多个值
+curl -XGET 'http://s1:9200/store/books/_search' -d '{
+    "query" : {
+        "filtered" : {
+            "filter" : {
+                "terms" : {
+                    "price" : [35.99, 99.99]
+                  }
+              }
+        }
+    }
+}'
+
+
+# SELECT * FROM books WHERE publish_date = "2015-02-06"
+curl -XGET 'http://s1:9200/bookstore/books/_search' -d '{
+  "query" : {
+    "filtered" : {
+        "filter" : {
+           "term" : {
+              "publish_date" : "2015-02-06"
+            }
+          }
+      }
+  }
+}'
 
 
 
+# bool过滤查询，可以做组合过滤查询
+# SELECT * FROM books WHERE (price = 35.99 OR price = 99.99) AND (publish_date != "2016-02-06")
+# 类似的，Elasticsearch也有 and, or, not这样的组合条件的查询方式
+# 格式如下：
+#  {
+#    "bool" : {
+#    "must" :     [],
+#    "should" :   [],
+#    "must_not" : [],
+#    }
+#  }
+#
+# must: 条件必须满足，相当于 and
+# should: 条件可以满足也可以不满足，相当于 or
+# must_not: 条件不需要满足，相当于 not
+
+curl -XGET 'http://s1:9200/bookstore/books/_search' -d '{
+  "query" : {
+    "filtered" : {
+      "filter" : {
+        "bool" : {
+          "should" : [
+            { "term" : {"price" : 35.99}},
+            { "term" : {"price" : 99.99}}
+          ],
+      "must_not" : {
+            "term" : {"publish_date" : "2016-02-06"}
+          }
+        }
+      }
+    }
+  }
+}'
+
+
+# 嵌套查询
+# SELECT * FROM books WHERE price = 35.99 OR ( publish_date = "2016-02-06" AND price = 99.99 )
+
+curl -XGET 'http://s1:9200/bookstore/books/_search' -d '{
+  "query" : {
+    "filtered" : {
+      "filter" : {
+        "bool" : {
+          "should" : [
+              { "term" : {"price" : 35.99}},
+              { "bool" : {
+              "must" : [
+                {"term" : {"publish_date" : "2016-02-06"}},
+                {"term" : {"price" : 99.99}}
+              ]
+            }}
+          ]
+        }
+      }
+    }
+  }
+}'
+
+# range范围过滤
+# SELECT * FROM books WHERE price >= 20 AND price < 100
+# gt :  > 大于
+# lt :  < 小于
+# gte :  >= 大于等于
+# lte :  <= 小于等于
+
+curl -XGET 'http://s1:9200/store/books/_search' -d '{
+  "query" : {
+    "filtered" : {
+      "filter" : {
+        "range" : {
+          "price" : {
+            "gt" : 20.0,
+            "lt" : 100
+          }
+        }
+      }
+    }
+  }
+}'
+
+
+# 另外一种 and， or， not查询
+# 没有bool, 直接使用and , or , not
+# 注意: 不带bool的这种查询不能利用缓存
+# 查询价格既是35.99，publish_date又为"2015-02-06"的结果
+curl -XGET 'http://s1:9200/bookstore/books/_search' -d '{
+  "query": {
+    "filtered": {
+      "filter": {
+        "and": [
+        {
+          "term": {
+            "price":59.99
+          }
+        },
+        {
+          "term": {
+            "publish_date":"2015-02-06"
+          }
+        }
+       ]
+     },
+     "query": {
+      "match_all": {}
+      }
+    }
+  }
+}'
+
+
+http://s1:9200/bookstore/books/_search
+
+# es安装插件下载es插件(这款是统计图类的web界面)
+/export/servers/elasticsearch/bin/plugin install elasticsearch/marvel/latest
+# 访问head管理页面
+http://s1:9200/_plugin/marvel
+
+
+########################################################################################################################
+###  配置 kafka数据通过 logstatsh 到 elasticsearch
+########################################################################################################################
+
+cd /export/servers/logstash/bin
+########## 首先生成游戏数据的 log
+
+cat >> game-kafka.conf << EOF
+input {
+  file {
+    path => "/export/data/logstash_sources/game-log/*.log"
+    discover_interval => 5
+    start_position => "beginning"
+  }
+}
+
+output {
+	kafka {
+	  topic_id => "game-log"
+	  codec => plain {
+		format => "%{message}"
+		charset => "UTF-8"
+	  }
+	  bootstrap_servers => "s1:9092,s2:9092"
+	}
+}
+EOF
+
+### 启动logstash
+/export/servers/logstash/bin/logstash agent -f game-kafka.conf > /dev/null 2>&1 &
+
+### 测试：
+启动zkServer.sh start 两台机器
+启动两台机器的 kafka
+nohup /export/servers/kafka/bin/kafka-server-start.sh  /export/servers/kafka/config/server.properties >/dev/null 2>&1 &
+
+# 建立测试日志目录：
+mkdir -p /export/data/logstash_sources/game-log/
+# 产生测试数据：使用下面这个脚本：
+
+cat >> creategamedata.sh << EOF
+#!/bin/bash
+for((i=0;i<=10;i++));
+    do echo "${i}	0	0	10	3	326	329	无法无天	骨玉权杖	185637842	1	装备回收	2016-02-16 10:57:25" >>/export/data/logstash_sources/game-log/test.log;
+done
+EOF
+chmod +x creategamedata.sh
+./creategamedata.sh
+
+## 消费kafka
+kafka-console-consumer.sh --zookeeper s2:2181 --from-beginning --topic game-log
+
+
+
+
+#################### 把kafka的数据取到 elasticsearch
+把 本项目shell/es里的kafka-es.conf里的内容复制到 /export/servers/logstash/bin目录下。
+cd /export/servers/logstash/bin
+cat >> kafka-es.conf << EOF
+input {
+  kafka {
+    type => "level-one"
+    auto_offset_reset => "smallest"
+    codec => plain {
+      charset => "UTF-8"
+    }
+	group_id => "es"
+	topic_id => "game-log"
+	zk_connect => "s1:2181,s2:2181,s3:2181,s4:2181"
+  }
+}
+
+filter {
+  mutate {
+    split => { "message" => "	" }
+      add_field => {
+        "event_type" => "%{message[3]}"
+        "current_map" => "%{message[4]}"
+        "current_X" => "%{message[5]}"
+        "current_y" => "%{message[6]}"
+        "user" => "%{message[7]}"
+        "item" => "%{message[8]}"
+        "item_id" => "%{message[9]}"
+        "current_time" => "%{message[12]}"
+     }
+     remove_field => [ "message" ]
+  }
+}
+
+output {
+    elasticsearch {
+      index => "level-one-%{+YYYY.MM.dd}"
+	  codec => plain {
+        charset => "UTF-8"
+      }
+      hosts => ["s1:9200", "s2:9200", "s3:9200", "s4:9200"]
+    }
+}
+EOF
+
+#启动
+/export/servers/logstash/bin/logstash agent -f kafka-es.conf > /dev/null 2>&1 &
+# 在管理界面看效果
+http://s1:9200/_plugin/head
 
 
 
