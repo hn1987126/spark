@@ -7,6 +7,9 @@ scp a.txt s1:$pwd
 ### Copy Reference 是复制包名+类名
 ### 显示目录大小   du -h ~/.m2
 
+#关掉防火墙，重启网络和sshd
+service iptables stop  &&  service network restart  && service sshd restart
+
 
 
 
@@ -623,6 +626,62 @@ spark-streaming-flume-sink_2.10-1.6.1.jar
 假如生成RDD的时间间隔是5秒，windows的时间是15秒，滑动的时间是10秒。
 等于是 15秒为一窗口，一窗口里有3个RDD的数据。这个窗口每10秒滑动一次。
 
+
+############################################################################################################
+大数据领域出现了新的技术 ELK Stack  ELK(ElasticSearch, Logstash, Kibana)搭建实时日志分析平台
+E 是elasticsearch 全文检索
+L Logstash是类似flume这样日志收集的
+K Kibana是直接出报表的
+[他们的公司都是 https://www.elastic.co]
+
+############## logstash安装
+https://www.elastic.co/guide/en/logstash/current/index.html下载 或者从我的网盘
+logstash-2.3.1.tar.gz，上传到服务器
+
+logstash是用JRuby语言开发的，所以要安装JDK
+
+tar -zxvf soft/logstash-2.3.1.tar.gz -C /export/servers
+cd /export/servers
+mv logstash-2.3.1 logstash
+cd logstash
+cd bin
+
+# 在bin目录下建一个配置文件
+cat >> flow-kafka.conf << EOF
+input {
+  file {
+    path => "/export/data/logstash_sources/log/*.log"
+    discover_interval => 5
+    start_position => "beginning"
+  }
+}
+
+output {
+	kafka {
+	  topic_id => "accesslog"
+	  codec => plain {
+		format => "%{message}"
+		charset => "UTF-8"
+	  }
+	  bootstrap_servers => "s1:9092,s2:9092"
+	}
+}
+EOF
+
+### 启动logstash
+/export/servers/logstash/bin/logstash agent -f flow-kafka.conf > /dev/null 2>&1 &
+
+### 测试：
+启动zkServer.sh start 两台机器
+启动两台机器的 kafka
+产生测试数据：使用下面这个脚本：
+# 建立测试日志目录：
+mkdir -h /export/data/logstash_sources/log/
+# 脚本内容：
+#!/bin/bash
+for((i=0;i<=5;i++));
+    do echo "{"time" : "1463904510.776","client" : "192.168.21.43","domain" : "www.lfg176.com","url" : "http://www.lfg176.com/","title" : "www.lfg176.com","referrer": "","sh" : "864","sw" : "1536","cd" : "24","lang" : "zh-CN","trace" : "1a6af4fc4a7d6609c1f2b4c3b0f3a2b9","type" : "1", "num":"$i"}" >>/export/data/logstash_sources/log/test.log;
+done
 
 
 

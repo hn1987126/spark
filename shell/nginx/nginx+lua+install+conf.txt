@@ -1,0 +1,185 @@
+yum -y install gcc perl pcre-devel openssl openssl-devel
+
+上传LuaJIT-2.0.4.tar.gz并安装LuaJIT
+tar -zxvf LuaJIT-2.0.4.tar.gz -C /usr/local/src/
+cd /usr/local/src/LuaJIT-2.0.4/
+make && make install PREFIX=/usr/local/luajit
+
+#设置环境变量
+export LUAJIT_LIB=/usr/local/luajit/lib
+export LUAJIT_INC=/usr/local/luajit/include/luajit-2.0
+
+#创建modules保存nginx的模块
+mkdir -p /usr/local/nginx/modules
+
+#上传openresty-1.9.7.3.tar.gz和依赖的模块lua-nginx-module-0.10.0.tar、ngx_devel_kit-0.2.19.tar、ngx_devel_kit-0.2.19.tar、echo-nginx-module-0.58.tar.gz
+#将依赖的模块直接解压到/usr/local/nginx/modules目录即可，不需要编译安装
+tar -zxvf lua-nginx-module-0.10.0.tar.gz -C /usr/local/nginx/modules/
+tar -zxvf set-misc-nginx-module-0.29.tar.gz -C /usr/local/nginx/modules/
+tar -zxvf ngx_devel_kit-0.2.19.tar.gz -C /usr/local/nginx/modules/
+tar -zxvf echo-nginx-module-0.58.tar.gz -C /usr/local/nginx/modules/
+ 
+#解压openresty-1.9.7.3.tar.gz
+tar -zxvf openresty-1.9.7.3.tar.gz -C /usr/local/src/
+cd /usr/local/src/openresty-1.9.7.3/
+#编译安装
+./configure --prefix=/usr/local/openresty --with-luajit && make && make install
+
+#上传nginx
+tar -zxvf nginx-1.8.1.tar.gz -C /usr/local/src/
+cd /usr/local/src/nginx-1.8.1/
+#编译nginx并支持其他模块
+./configure --prefix=/usr/local/nginx \
+	--with-ld-opt="-Wl,-rpath,/usr/local/luajit/lib" \
+    --add-module=/usr/local/nginx/modules/ngx_devel_kit-0.2.19 \
+    --add-module=/usr/local/nginx/modules/lua-nginx-module-0.10.0 \
+    --add-module=/usr/local/nginx/modules/set-misc-nginx-module-0.29 \
+    --add-module=/usr/local/nginx/modules/echo-nginx-module-0.58 
+make -j2
+make install
+
+#修改nginx配置文件
+worker_processes  2;
+
+events {
+    worker_connections  1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+
+    log_format tick "$msec^A$remote_addr^A$u_domain^A$u_url^A$u_title^A$u_referrer^A$u_sh^A$u_sw^A$u_cd^A$u_lang^A$http_user_agent^A$u_utrace^A$u_account";
+    
+    access_log  logs/access.log  tick;
+
+    sendfile        on;
+
+    keepalive_timeout  65;
+
+    server {
+        listen       80;
+        server_name  localhost;
+		location /log.gif {
+			#伪装成gif文件
+			default_type image/gif;    
+			#本身关闭access_log，通过subrequest记录log
+			access_log off;
+		
+			access_by_lua "
+				-- 用户跟踪cookie名为__utrace
+				local uid = ngx.var.cookie___utrace        
+				if not uid then
+					-- 如果没有则生成一个跟踪cookie，算法为md5(时间戳+IP+客户端信息)
+					uid = ngx.md5(ngx.now() .. ngx.var.remote_addr .. ngx.var.http_user_agent)
+				end 
+				ngx.header['Set-Cookie'] = {'__utrace=' .. uid .. '; path=/'}
+				if ngx.var.arg_domain then
+				-- 通过subrequest到/i-log记录日志，将参数和用户跟踪cookie带过去
+					ngx.location.capture('/i-log?' .. ngx.var.args .. '&utrace=' .. uid)
+				end 
+			";  
+		
+			#此请求不缓存
+			add_header Expires "Fri, 01 Jan 1980 00:00:00 GMT";
+			add_header Pragma "no-cache";
+			add_header Cache-Control "no-cache, max-age=0, must-revalidate";
+		
+			#返回一个1×1的空gif图片
+			empty_gif;
+		}   
+	
+		location /i-log {
+			#内部location，不允许外部直接访问
+			internal;
+		
+			#设置变量，注意需要unescape
+			set_unescape_uri $u_domain $arg_domain;
+			set_unescape_uri $u_url $arg_url;
+			set_unescape_uri $u_title $arg_title;
+			set_unescape_uri $u_referrer $arg_referrer;
+			set_unescape_uri $u_sh $arg_sh;
+			set_unescape_uri $u_sw $arg_sw;
+			set_unescape_uri $u_cd $arg_cd;
+			set_unescape_uri $u_lang $arg_lang;
+			set_unescape_uri $u_utrace $arg_utrace;
+			set_unescape_uri $u_account $arg_account;
+		
+			#打开日志
+			log_subrequest on;
+			#记录日志到ma.log，实际应用中最好加buffer，格式为tick
+			access_log /var/nginx_logs/track.log tick;
+		
+			#输出空字符串
+			echo '';
+		}	
+	
+    }
+}
+
+
+
+
+<script type="text/javascript">
+	var _maq = _maq || [];
+	_maq.push(['type', '1']);
+ 
+	(function() {
+		var ma = document.createElement('script'); 
+		ma.type = 'text/javascript';
+		ma.async = true;
+		ma.src = 'http://flow.itcast.cn/track.js';
+		var s = document.getElementsByTagName('script')[0]; 
+		s.parentNode.insertBefore(ma, s);
+	})();
+</script>
+
+
+
+(function () {
+    var params = {};
+    //Document对象数据
+    if(document) {
+        params.domain = document.domain || ''; 
+        params.url = document.URL || ''; 
+        params.title = document.title || ''; 
+        params.referrer = document.referrer || ''; 
+    }   
+    //Window对象数据
+    if(window && window.screen) {
+        params.sh = window.screen.height || 0;
+        params.sw = window.screen.width || 0;
+        params.cd = window.screen.colorDepth || 0;
+    }   
+    //navigator对象数据
+    if(navigator) {
+        params.lang = navigator.language || ''; 
+    }   
+    //解析_maq配置
+    if(_maq) {
+        for(var i in _maq) {
+            switch(_maq[i][0]) {
+                case 'type':
+                    params.account = _maq[i][1];
+                    break;
+                default:
+                    break;
+            }   
+        }   
+    }   
+    //拼接参数串
+    var args = ''; 
+    for(var i in params) {
+        if(args != '') {
+            args += '&';
+        }   
+        args += i + '=' + encodeURIComponent(params[i]);
+    }   
+ 
+    //通过Image对象请求后端脚本
+    var img = new Image(1, 1); 
+    img.src = 'http://flow.itcast.cn/log.gif?' + args;
+})();
+
+
+curl 'http://mercury.jd.com/log.gif?t=other.000000&m=UA-J2011-1&pin=-&uid=1589014681&sid=1589014681|3&v=je%3D0%24sc%3D24-bit%24sr%3D1280x768%24ul%3Dzh-cn%24cs%3DGBK%24dt%3D%E3%80%90Apple%20iPhone%206s%20Plus%E3%80%91Apple%20iPhone%206s%20Plus%20(A1699)%2064G%20%E7%8E%AB%E7%91%B0%E9%87%91%E8%89%B2%20%E7%A7%BB%E5%8A%A8%E8%81%94%E9%80%9A%E7%94%B5%E4%BF%A14G%E6%89%8B%E6%9C%BA%E3%80%90%E8%A1%8C%E6%83%85%20%E6%8A%A5%E4%BB%B7%20%E4%BB%B7%E6%A0%BC%20%E8%AF%84%E6%B5%8B%E3%80%91-%E4%BA%AC%E4%B8%9C%24hn%3Ditem.jd.com%24fl%3D20.0%20r0%24os%3Dwin%24br%3Dchrome%24bv%3D48.0.2564.116%24wb%3D1457066963%24xb%3D1457334752%24yb%3D1457335271%24zb%3D3%24cb%3D11%24usc%3Dbaidu%24ucp%3D-%24umd%3Dorganic%24uct%3D%2525E4%2525BA%2525AC%2525E4%2525B8%25259C%2525E7%252599%2525BD%2525E6%25259D%2525A1%24ct%3D1457335542200%24lt%3D0%24tad%3D-%24t1%3D1%24t2%3D1%24p0%3D1861098%24pinid%3D-&ref=http%3A%2F%2Flist.jd.com%2Flist.html%3Fcat%3D9987%252C653%252C655%26go%3D0&rm=1457335542201' -H 'Accept-Encoding: gzip, deflate, sdch' -H 'Accept-Language: zh-CN,zh;q=0.8' -H 'User-Agent: Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.116 Safari/537.36' -H 'Accept: image/webp,image/*,*/*;q=0.8' -H 'Referer: http://item.jd.com/1861098.html' -H 'Cookie: __jdv=180801204|baidu|-|organic|%25E4%25BA%25AC%25E4%25B8%259C%25E7%2599%25BD%25E6%259D%25A1; _jrda=1; _jrdb=1457335329656; ipLocation=%u5317%u4EAC; areaId=1; ipLoc-djd=1-72-2799-0; __jda=122270672.1589014681.1457066963.1457334752.1457335271.3; __jdb=122270672.11.1589014681|3.1457335271; __jdc=122270672; __jdu=1589014681' -H 'Connection: keep-alive' -H 'Cache-Control: max-age=0' --compressed
