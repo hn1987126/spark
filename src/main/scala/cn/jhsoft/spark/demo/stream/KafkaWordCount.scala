@@ -27,6 +27,7 @@ object KafkaWordCount {
     //"Array((alog-2016-04-16, 2), (alog-2016-04-17, 2), (alog-2016-04-18, 2))"
     val topicMap = topics.split(",").map((_, numThreads.toInt)).toMap
     val data = KafkaUtils.createStream(ssc, zkQuorum, group, topicMap, StorageLevel.MEMORY_AND_DISK_SER)
+    // _._2是指把 kafka的value拿出来，kafka是返回 k,v 形式的
     val words = data.map(_._2).flatMap(_.split(" "))
     val wordCounts = words.map((_, 1)).updateStateByKey(updateFunc, new HashPartitioner(ssc.sparkContext.defaultParallelism), true)
     wordCounts.print()

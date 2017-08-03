@@ -1,5 +1,10 @@
 package cn.jhsoft.scala.demo
 
+import java.text.SimpleDateFormat
+import java.util.Date
+
+import org.apache.commons.lang3.time.FastDateFormat
+
 /**
   * Created by chenyi9 on 2017/7/26.
   */
@@ -42,6 +47,14 @@ object test {
     val fun1 = (v3:Int, v4:Int) => {
       v3+v4
     }
+
+    val a1 = FastDateFormat.getInstance("yyyy-MM-dd HH:mm:ss")
+    val d1 = new Date()
+    println(a1.format(d1))
+
+    val format1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+    val c1 = "2017-08-03 18:33:57"
+    println(a1.parse(c1).getTime)
 
   }
 

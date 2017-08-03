@@ -4,6 +4,9 @@ import org.apache.spark.SparkConf
 import org.apache.spark.streaming.{Milliseconds, Seconds, StreamingContext}
 /**
   * Created by chen on 2017/8/1.
+  *
+  * ssc.socketTextStream("s1", 8888) 这个可以在服务器上用  nc -l 8888  在这里输入信息，这里便能接收到
+  *
   */
 object WindowOpts {
 
@@ -13,6 +16,7 @@ object WindowOpts {
     val ssc = new StreamingContext(conf, Milliseconds(5000))
     val lines = ssc.socketTextStream("s1", 8888)
     val pairs = lines.flatMap(_.split(" ")).map((_, 1))
+    // 15秒为一个窗口，10秒滑动一次。
     val windowedWordCounts = pairs.reduceByKeyAndWindow((a:Int,b:Int) => (a + b), Seconds(15), Seconds(10))
     //Map((hello, 5), (jerry, 2), (kitty, 3))
     windowedWordCounts.print()

@@ -55,7 +55,7 @@ object DirectKafkaWordCount {
     val kafkaParams = Map[String, String](
       "metadata.broker.list" -> brokers,
       "group.id" -> groupId,
-      "auto.offset.reset" -> "smallest"
+      "auto.offset.reset" -> "smallest"  // 这是从头消费，默认是从启动此程序后产生的数据才会消费
     )
 
     val km = new KafkaManager(kafkaParams)

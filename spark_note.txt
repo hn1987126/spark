@@ -10,7 +10,35 @@ scp a.txt s1:$pwd
 #关掉防火墙，重启网络和sshd
 service iptables stop  &&  service network restart  && service sshd restart
 
+#### 大技巧
+在写scala程序的时候，写了一个函数，想知道他返回什么类型，及把结果赋值给一个val变量
+类似于java里的，写了new String(),按Alt+Enter来补前面的类型和变量名。
+scala里是用 Alt+Ctrl+ v
 
+### kafka 消费  （通过这个设置 auto.offset.reset）
+smallest  这是从头开始消费
+beginning    是从当前程序启动之后的位置消费
+
+### IDEA 技巧
+ctrl+z 是回退，撤销。
+ctrl+shift+z 是放弃撤销。类似于其他IDE里的ctrl+y
+
+### FastDateFormat 日期格式化
+SimpleDateFormat来做Date到String的类型转换，要用Apache的commons-lang中的FastDateFormat。JDK里自带的SimpleDateFormat线程不安全。
+
+需要引入 import org.apache.commons.lang3.time.FastDateFormat而不是lang,默认可能是lang，实际上需要lang3。不然没有parse方法。
+// 日期格式化为字符串
+val a = FastDateFormat.getInstance("yyyy-MM-dd HH:mm:ss")
+val d = new Date()
+println(a.format(d))
+
+// 字符串按格式化格为日期，这就可以取他里面的getTime，也就是时间戳。
+val format1 = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")  // 这是jdk里的类，不安全
+val c = "2017-08-03 18:33:57"
+println(a.parse(c).getTime)
+
+#### kafka 往 elasticsearch 写数据编码问题：
+elasticsearch charset 的编码默认是utf8，如果是gb2312的字符往他里面写，可以用 设置charset为 UTF-16BE 来解决
 
 
 ##########################################################################
@@ -642,7 +670,10 @@ L Logstash是类似flume这样日志收集的
 K Kibana是直接出报表的
 [他们的公司都是 https://www.elastic.co]
 
-############## logstash安装
+
+############################################################################################################
+############# logstash安装
+############################################################################################################
 https://www.elastic.co/guide/en/logstash/current/index.html下载 或者从我的网盘
 logstash-2.3.1.tar.gz，上传到服务器
 
@@ -676,8 +707,11 @@ output {
 }
 EOF
 
+## 杀掉进程
+kill `ps -ef | grep logstash | grep -v grep | awk '{print $2}'`
 ### 启动logstash
 /export/servers/logstash/bin/logstash agent -f flow-kafka.conf > /dev/null 2>&1 &
+## 启动后 jps 会看到  Main
 
 ### 测试：
 启动zkServer.sh start 两台机器
@@ -746,6 +780,8 @@ sed -i "/^network.host/c\network.host: s2" /export/servers/elasticsearch/config/
 
 ## 启动es，需要在本机和其他机器都启动
 /export/servers/elasticsearch/bin/elasticsearch -d
+
+## 启动后 jps 会看到  Elasticsearch
 
 ## 用浏览器访问es所在机器的9200端口
 http://s1:9200/
@@ -1027,6 +1063,8 @@ output {
 }
 EOF
 
+## 杀掉进程
+kill `ps -ef | grep logstash | grep -v grep | awk '{print $2}'`
 ### 启动logstash
 /export/servers/logstash/bin/logstash agent -f game-kafka.conf > /dev/null 2>&1 &
 
@@ -1103,6 +1141,13 @@ EOF
 /export/servers/logstash/bin/logstash agent -f kafka-es.conf > /dev/null 2>&1 &
 # 在管理界面看效果
 http://s1:9200/_plugin/head
+
+
+
+
+
+
+
 
 
 
