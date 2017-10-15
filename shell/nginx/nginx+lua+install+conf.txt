@@ -1,5 +1,7 @@
 yum -y install gcc perl pcre-devel openssl openssl-devel
 
+网盘目录在：：大锅-》tmp->游戏项目->日志采集服务-》日志采集
+
 上传LuaJIT-2.0.4.tar.gz并安装LuaJIT
 tar -zxvf LuaJIT-2.0.4.tar.gz -C /usr/local/src/
 cd /usr/local/src/LuaJIT-2.0.4/
